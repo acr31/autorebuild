@@ -13,13 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package uk.ac.cam.acr31.autorebuild.clazzinfo;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.testing.compile.Compiler.javac;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.JavaFileObjects;
@@ -30,40 +28,43 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class ResolvedTest {
+public class NameTest {
 
   @Test
-  public void singleFile() throws IOException {
+  public void packageCorrect_forOuterClass() throws IOException {
+    // ARRANGE
+    JavaFileObject sourceFile =
+        JavaFileObjects.forSourceLines(
+            "foo.bar.Test", //
+            "package foo.bar;",
+            "public class Test {}");
+    Compilation compilation = javac().compile(sourceFile);
+    JavaFileObject output = Iterables.getOnlyElement(compilation.generatedFiles());
+
+    // ACT
+    ClassFile classFile = ClassFile.create(output.getName(), output.openInputStream());
+
+    // ASSERT
+    assertThat(classFile.packageName()).isEqualTo("foo.bar");
+  }
+
+  @Test
+  public void packageCorrect_forInnerClass() throws IOException {
     // ARRANGE
     JavaFileObject sourceFile =
         JavaFileObjects.forSourceLines(
             "foo.bar.Test", //
             "package foo.bar;",
             "public class Test {",
-            "  int i = 0;",
-            "  int f(int x) {",
-            "    Test t = new Test();",
-            "    return i;",
-            "  }",
-            "  int f() {",
-            "    return f() + f(1);",
-            "  }",
+            " class Inner {}",
             "}");
     Compilation compilation = javac().compile(sourceFile);
-    JavaFileObject output = Iterables.getOnlyElement(compilation.generatedFiles());
+    JavaFileObject output = compilation.generatedFiles().get(1);
 
     // ACT
-    Summary summary = Summary.create(output.getName(), output.openInputStream());
+    ClassFile classFile = ClassFile.create(output.getName(), output.openInputStream());
 
     // ASSERT
-    assertThat(summary.referenced()).containsExactlyElementsIn(withObjectSuper(summary.declared()));
-  }
-
-  private static ImmutableSet<String> withObjectSuper(ImmutableSet<String> identifiers) {
-    return ImmutableSet.<String>builder()
-        .addAll(identifiers)
-        .add(Identifiers.fromInternalName("java/lang/Object"))
-        .add(Identifiers.fromMethod("Ljava/lang/Object;", "<init>", "()V"))
-        .build();
+    assertThat(classFile.packageName()).isEqualTo("foo.bar");
   }
 }

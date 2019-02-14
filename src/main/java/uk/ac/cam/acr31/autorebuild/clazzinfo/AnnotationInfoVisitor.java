@@ -19,27 +19,28 @@ package uk.ac.cam.acr31.autorebuild.clazzinfo;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.Opcodes;
 
-public class AnnotationInfoVisitor extends AnnotationVisitor {
+class AnnotationInfoVisitor extends AnnotationVisitor {
 
-  private final Summary.Builder summary;
+  private final ClassFile.Builder classFile;
 
-  AnnotationInfoVisitor(Summary.Builder summary) {
+  AnnotationInfoVisitor(ClassFile.Builder classFile) {
     super(Opcodes.ASM7);
-    this.summary = summary;
+    this.classFile = classFile;
   }
 
   @Override
   public void visitEnum(String name, String descriptor, String value) {
-    summary.addReferenced(Identifiers.fromInternalName(descriptor));
+    classFile.addReferenced(Identifier.create(descriptor));
   }
 
   @Override
   public AnnotationVisitor visitAnnotation(String name, String descriptor) {
-    return new AnnotationInfoVisitor(summary);
+    classFile.addReferenced(Identifier.create(descriptor));
+    return new AnnotationInfoVisitor(classFile);
   }
 
   @Override
   public AnnotationVisitor visitArray(String name) {
-    return new AnnotationInfoVisitor(summary);
+    return new AnnotationInfoVisitor(classFile);
   }
 }

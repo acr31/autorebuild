@@ -21,23 +21,23 @@ import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.TypePath;
 
-public class FieldInfoVisitor extends FieldVisitor {
+class FieldInfoVisitor extends FieldVisitor {
 
-  private final Summary.Builder summary;
+  private final ClassFile.Builder classFile;
 
-  FieldInfoVisitor(Summary.Builder summary) {
+  FieldInfoVisitor(ClassFile.Builder classFile) {
     super(Opcodes.ASM7);
-    this.summary = summary;
+    this.classFile = classFile;
   }
 
   @Override
   public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-    return new AnnotationInfoVisitor(summary);
+    return new AnnotationInfoVisitor(classFile);
   }
 
   @Override
   public AnnotationVisitor visitTypeAnnotation(
       int typeRef, TypePath typePath, String descriptor, boolean visible) {
-    return new AnnotationInfoVisitor(summary);
+    return new AnnotationInfoVisitor(classFile);
   }
 }

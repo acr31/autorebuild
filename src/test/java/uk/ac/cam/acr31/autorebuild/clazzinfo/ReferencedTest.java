@@ -17,40 +17,95 @@
 package uk.ac.cam.acr31.autorebuild.clazzinfo;
 
 import static com.google.common.truth.Truth.assertThat;
-import static com.google.testing.compile.Compiler.javac;
 
 import com.google.common.collect.Iterables;
-import com.google.testing.compile.Compilation;
-import com.google.testing.compile.JavaFileObjects;
-import java.io.IOException;
-import javax.tools.JavaFileObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import uk.ac.cam.acr31.autorebuild.testing.AutoSource;
+import uk.ac.cam.acr31.autorebuild.testing.Compilation;
 
 @RunWith(JUnit4.class)
 public class ReferencedTest {
 
   @Test
-  public void referencedMethod_isFound() throws IOException {
+  public void referencedMethod_isFound() {
     // ARRANGE
-    JavaFileObject sourceFile =
-        JavaFileObjects.forSourceLines(
-            "foo.bar.Test", //
-            "package foo.bar;",
-            "public class Test {",
-            "  void f() {",
-            "    System.out.println(3);",
-            "  }",
-            "}");
-    Compilation compilation = javac().compile(sourceFile);
-    JavaFileObject output = Iterables.getOnlyElement(compilation.generatedFiles());
+    AutoSource sourceFile =
+        AutoSource.builder()
+            .setPackageName("foo.bar")
+            .setClassName("Test")
+            .setSourceLines(
+                "package foo.bar;", //
+                "public class Test {",
+                "  void f() {",
+                "    System.out.println(3);",
+                "  }",
+                "}")
+            .build();
+    Compilation compilation = Compilation.create(sourceFile);
 
     // ACT
-    Summary summary = Summary.create(output.getName(), output.openInputStream());
+    ClassFile classFile = Iterables.getOnlyElement(compilation.classFiles());
 
     // ASSERT
-    assertThat(summary.referenced())
-        .contains(Identifiers.fromMethod("Ljava/io/PrintStream;", "println", "(I)V"));
+    assertThat(classFile.referenced())
+        .contains(Identifier.create("java/io/PrintStream", "println(I)V"));
+  }
+
+  @Test
+  public void innerClass_isReferenced() {
+    // ARRANGE
+    AutoSource sourceFile =
+        AutoSource.builder()
+            .setPackageName("foo.bar")
+            .setClassName("Test")
+            .setSourceLines(
+                "package foo.bar;", //
+                "public class Test {",
+                "  class Inner {}",
+                "}")
+            .build();
+    Compilation compilation = Compilation.create(sourceFile);
+
+    // ACT
+    ClassFile classFile = compilation.classFiles().get(0);
+
+    // ASSERT
+    assertThat(classFile.referenced()).contains(Identifier.create("foo/bar/Test$Inner"));
+  }
+
+  @Test
+  public void annotation_isReferenced() {
+    // ARRANGE
+    AutoSource annotation =
+        AutoSource.builder()
+            .setPackageName("foo.bar")
+            .setClassName("TestAnn")
+            .setSourceLines(
+                "package foo.bar;", //
+                "import java.lang.annotation.Retention;",
+                "import java.lang.annotation.RetentionPolicy;",
+                "import java.lang.annotation.Target;",
+                "@Retention(RetentionPolicy.RUNTIME)",
+                "public @interface TestAnn {}")
+            .build();
+    AutoSource sourceFile =
+        AutoSource.builder()
+            .setPackageName("foo.bar")
+            .setClassName("Test")
+            .setSourceLines(
+                "package foo.bar;", //
+                "@TestAnn",
+                "public class Test {}")
+            .build();
+
+    Compilation compilation = Compilation.create(annotation, sourceFile);
+
+    // ACT
+    ClassFile classFile = compilation.classFiles().get(1);
+
+    // ASSERT
+    assertThat(classFile.referenced()).contains(Identifier.create("foo/bar/TestAnn"));
   }
 }

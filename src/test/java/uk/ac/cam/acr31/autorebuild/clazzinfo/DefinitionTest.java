@@ -45,13 +45,10 @@ public class DefinitionTest {
     JavaFileObject output = Iterables.getOnlyElement(compilation.generatedFiles());
 
     // ACT
-    Summary summary = Summary.create(output.getName(), output.openInputStream());
+    ClassFile classFile = ClassFile.create(output.getName(), output.openInputStream());
 
     // ASSERT
-    assertThat(summary.declared())
-        .contains(
-            Identifiers.fromMethod(
-                "Lfoo/bar/Test;", "methodDef", "(Ljava/lang/String;ILjava/lang/Integer;)V"));
+    assertThat(classFile.declares("methodDef(Ljava/lang/String;ILjava/lang/Integer;)V")).isTrue();
   }
 
   @Test
@@ -66,10 +63,10 @@ public class DefinitionTest {
     JavaFileObject output = Iterables.getOnlyElement(compilation.generatedFiles());
 
     // ACT
-    Summary summary = Summary.create(output.getName(), output.openInputStream());
+    ClassFile classFile = ClassFile.create(output.getName(), output.openInputStream());
 
     // ASSERT
-    assertThat(summary.declared()).contains(Identifiers.fromInternalName("foo/bar/Test"));
+    assertThat(classFile.declared()).contains(Identifier.create("foo/bar/Test"));
   }
 
   @Test
@@ -86,30 +83,9 @@ public class DefinitionTest {
     JavaFileObject output = Iterables.getOnlyElement(compilation.generatedFiles());
 
     // ACT
-    Summary summary = Summary.create(output.getName(), output.openInputStream());
+    ClassFile classFile = ClassFile.create(output.getName(), output.openInputStream());
 
     // ASSERT
-    assertThat(summary.declared())
-        .contains(Identifiers.fromField("Lfoo/bar/Test;", "myField", "Ljava/util/List;"));
-  }
-
-  @Test
-  public void definedInnerClass_isFound() throws IOException {
-    // ARRANGE
-    JavaFileObject sourceFile =
-        JavaFileObjects.forSourceLines(
-            "foo.bar.Test", //
-            "package foo.bar;",
-            "public class Test {",
-            "  class Inner {}",
-            "}");
-    Compilation compilation = javac().compile(sourceFile);
-    JavaFileObject output = compilation.generatedFiles().get(0);
-
-    // ACT
-    Summary summary = Summary.create(output.getName(), output.openInputStream());
-
-    // ASSERT
-    assertThat(summary.declared()).contains(Identifiers.fromInternalName("foo/bar/Test$Inner"));
+    assertThat(classFile.declares("myField"));
   }
 }

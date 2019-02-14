@@ -17,75 +17,122 @@
 package uk.ac.cam.acr31.autorebuild.clazzinfo;
 
 import org.objectweb.asm.AnnotationVisitor;
+import org.objectweb.asm.Handle;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.TypePath;
 
-public class MethodInfoVisitor extends MethodVisitor {
+class MethodInfoVisitor extends MethodVisitor {
 
-  private final Summary.Builder summary;
+  private final ClassFile.Builder classFile;
 
-  public MethodInfoVisitor(Summary.Builder summary) {
+  MethodInfoVisitor(ClassFile.Builder classFile) {
     super(Opcodes.ASM7);
-    this.summary = summary;
+    this.classFile = classFile;
+  }
+
+  @Override
+  public void visitInvokeDynamicInsn(
+      String name,
+      String descriptor,
+      Handle bootstrapMethodHandle,
+      Object... bootstrapMethodArguments) {
+    Identifier.fromMethodDescriptor(descriptor).forEach(classFile::addReferenced);
+    super.visitInvokeDynamicInsn(name, descriptor, bootstrapMethodHandle, bootstrapMethodArguments);
+  }
+
+  @Override
+  public void visitMultiANewArrayInsn(String descriptor, int numDimensions) {
+    if (Identifier.isClassType(descriptor)) {
+      classFile.addReferenced(Identifier.create(descriptor));
+    }
+    super.visitMultiANewArrayInsn(descriptor, numDimensions);
+  }
+
+  @Override
+  public void visitLocalVariable(
+      String name, String descriptor, String signature, Label start, Label end, int index) {
+    if (Identifier.isClassType(descriptor)) {
+      classFile.addReferenced(Identifier.create(descriptor));
+    }
+    super.visitLocalVariable(name, descriptor, signature, start, end, index);
   }
 
   @Override
   public AnnotationVisitor visitAnnotationDefault() {
-    return new AnnotationInfoVisitor(summary);
+    return new AnnotationInfoVisitor(classFile);
   }
 
   @Override
   public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-    return new AnnotationInfoVisitor(summary);
+    classFile.addReferenced(Identifier.create(descriptor));
+    return new AnnotationInfoVisitor(classFile);
   }
 
   @Override
   public AnnotationVisitor visitTypeAnnotation(
       int typeRef, TypePath typePath, String descriptor, boolean visible) {
-    return new AnnotationInfoVisitor(summary);
+    classFile.addReferenced(Identifier.create(descriptor));
+    return new AnnotationInfoVisitor(classFile);
   }
 
   @Override
   public AnnotationVisitor visitParameterAnnotation(
       int parameter, String descriptor, boolean visible) {
-    return new AnnotationInfoVisitor(summary);
+    classFile.addReferenced(Identifier.create(descriptor));
+    return new AnnotationInfoVisitor(classFile);
   }
 
   @Override
   public void visitTypeInsn(int opcode, String type) {
-    summary.addReferenced(Identifiers.fromInternalName(type));
+    // this isn't ideal because we can't tell the difference between I (the internal name for a
+    // class I with no package) and I (the type descriptor for an integer)
+    if (Identifier.isClassType(type)) {
+      classFile.addReferenced(Identifier.create(type));
+    }
   }
 
   @Override
   public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
-    summary.addReferenced(
-        Identifiers.fromField(Identifiers.fromInternalName(owner), name, descriptor));
+    if (Identifier.isPrimitiveArrayType(owner)) {
+      return;
+    }
+    classFile.addReferenced(Identifier.create(owner, name));
+    if (Identifier.isClassType(descriptor)) {
+      classFile.addReferenced(Identifier.create(descriptor));
+    }
   }
 
   @Override
   public void visitMethodInsn(
       int opcode, String owner, String name, String descriptor, boolean isInterface) {
-    summary.addReferenced(
-        Identifiers.fromMethod(Identifiers.fromInternalName(owner), name, descriptor));
+    if (Identifier.isPrimitiveArrayType(owner)) {
+      return;
+    }
+    classFile.addReferenced(Identifier.create(owner, name + descriptor));
+    Identifier.fromMethodDescriptor(descriptor).forEach(classFile::addReferenced);
   }
 
   @Override
   public AnnotationVisitor visitInsnAnnotation(
       int typeRef, TypePath typePath, String descriptor, boolean visible) {
-    return new AnnotationInfoVisitor(summary);
+    classFile.addReferenced(Identifier.create(descriptor));
+    return new AnnotationInfoVisitor(classFile);
   }
 
   @Override
   public void visitTryCatchBlock(Label start, Label end, Label handler, String type) {
-    summary.addReferenced(Identifiers.fromInternalName(type));
+    if (type != null) {
+      classFile.addReferenced(Identifier.create(type));
+    }
   }
 
   @Override
   public AnnotationVisitor visitTryCatchAnnotation(
       int typeRef, TypePath typePath, String descriptor, boolean visible) {
-    return new AnnotationInfoVisitor(summary);
+    classFile.addReferenced(Identifier.create(descriptor));
+    return new AnnotationInfoVisitor(classFile);
   }
 
   @Override
@@ -97,6 +144,7 @@ public class MethodInfoVisitor extends MethodVisitor {
       int[] index,
       String descriptor,
       boolean visible) {
-    return new AnnotationInfoVisitor(summary);
+    classFile.addReferenced(Identifier.create(descriptor));
+    return new AnnotationInfoVisitor(classFile);
   }
 }

@@ -16,7 +16,10 @@
 
 package uk.ac.cam.acr31.autorebuild.clazzinfo;
 
+import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import java.util.Arrays;
+import java.util.List;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.FieldVisitor;
@@ -24,18 +27,18 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.TypePath;
 
-public class ClassInfoVisitor extends ClassVisitor {
+class ClassInfoVisitor extends ClassVisitor {
 
-  private Summary.Builder summary;
+  private ClassFile.Builder classFile;
 
-  public ClassInfoVisitor(Summary.Builder summary) {
+  ClassInfoVisitor(ClassFile.Builder classFile) {
     super(Opcodes.ASM7);
-    this.summary = summary;
+    this.classFile = classFile;
   }
 
   @Override
   public void visitSource(String source, String debug) {
-    summary.setSourceFile(source);
+    classFile.setSourceFileName(source);
   }
 
   @Override
@@ -46,39 +49,64 @@ public class ClassInfoVisitor extends ClassVisitor {
       String signature,
       String superName,
       String[] interfaces) {
-    summary.setClassName(Identifiers.fromInternalName(name));
-    summary.addDeclared(Identifiers.fromInternalName(name));
-    summary.addReferenced(Identifiers.fromInternalName(superName));
-    Arrays.stream(interfaces).map(Identifiers::fromInternalName).forEach(summary::addReferenced);
+    Identifier descriptor = Identifier.create(name);
+    classFile.setDescriptor(descriptor.owner());
+    classFile.addDeclared(descriptor);
+
+    // if its an innerclass add a ref to the outerclass so we include it
+    if (name.contains("$")) {
+      Identifier outerDescriptor = Identifier.create(name.replaceAll("\\$.*", ""));
+      classFile.addReferenced(outerDescriptor);
+    }
+
+    List<String> elements = Splitter.on("/").splitToList(name);
+    classFile.setPackageName(Joiner.on(".").join(elements.subList(0, elements.size() - 1)));
+
+    if (superName != null) { // objects have no super-class
+      Identifier superIdentifier = Identifier.create(superName);
+      classFile.addAncestor(superIdentifier.owner());
+      classFile.addReferenced(superIdentifier);
+    }
+
+    Arrays.stream(interfaces)
+        .map(Identifier::create)
+        .forEach(
+            i -> {
+              classFile.addAncestor(i.owner());
+              classFile.addReferenced(i);
+            });
   }
 
   @Override
   public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-    return new AnnotationInfoVisitor(summary);
+    classFile.addReferenced(Identifier.create(descriptor));
+    return new AnnotationInfoVisitor(classFile);
   }
 
   @Override
   public AnnotationVisitor visitTypeAnnotation(
       int typeRef, TypePath typePath, String descriptor, boolean visible) {
-    return new AnnotationInfoVisitor(summary);
+    classFile.addReferenced(Identifier.create(descriptor));
+    return new AnnotationInfoVisitor(classFile);
   }
 
   @Override
   public void visitInnerClass(String name, String outerName, String innerName, int access) {
-    summary.addDeclared(Identifiers.fromInternalName(name));
+    classFile.addReferenced(Identifier.create(name));
   }
 
   @Override
   public FieldVisitor visitField(
       int access, String name, String descriptor, String signature, Object value) {
-    summary.addDeclared(Identifiers.fromField(summary.className(), name, descriptor));
-    return new FieldInfoVisitor(summary);
+    classFile.addDeclared(Identifier.create(classFile.descriptor(), name));
+    return new FieldInfoVisitor(classFile);
   }
 
   @Override
   public MethodVisitor visitMethod(
       int access, String name, String descriptor, String signature, String[] exceptions) {
-    summary.addDeclared(Identifiers.fromMethod(summary.className(), name, descriptor));
-    return new MethodInfoVisitor(summary);
+    classFile.addDeclared(Identifier.create(classFile.descriptor(), name + descriptor));
+    Identifier.fromMethodDescriptor(descriptor).forEach(classFile::addReferenced);
+    return new MethodInfoVisitor(classFile);
   }
 }
